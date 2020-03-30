@@ -104,7 +104,8 @@ if __name__ == "__main__":
         args.destination = args.source
 
     if args.logfile:
-        handler = logging.FileHandler(args.logfile)
+        from logging.handlers import TimedRotatingFileHandler
+        handler = TimedRotatingFileHandler(args.logfile, when="D", backupCount=7)
     else:
         handler = logging.StreamHandler(sys.stdout)
 
