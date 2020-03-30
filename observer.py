@@ -1,4 +1,5 @@
 import argparse
+import collections
 import os
 import sys
 import time
@@ -15,7 +16,7 @@ log = logging.getLogger()
 
 class NewFileHander(FileSystemEventHandler):
     def __init__(
-        self, extension_mapper, destination_folder, excluded, *args, **kwargs,
+        self, extension_mapper, destination_folder, excluded, *args, recursive=False, **kwargs,
     ):
         """
         Handler for observing file modifications.
@@ -31,6 +32,7 @@ class NewFileHander(FileSystemEventHandler):
         self.extension_mapper = extension_mapper
         self.destination_folder = destination_folder
         self.excluded = excluded
+        self.recursive = recursive
 
     def on_modified(self, event):
         if not os.path.isfile(event.src_path):
@@ -98,13 +100,30 @@ if __name__ == "__main__":
     )
     parser.add_argument("-l", "--logfile", help="Log file")
     parser.add_argument("-v", "--debug", help="Run in debug mode", action="store_true")
+    parser.add_argument(
+        "-r", "--recursive", help="Recursive", action="store_true", default=False
+    )
+    parser.add_argument(
+        "--sort-old",
+        help="At start of program, sort all old files",
+        action="store_true",
+        default=True,
+    )
     args = parser.parse_args()
+
+    if args.recursive and (
+        args.destination == "source" or args.source.startswith(args.destination)
+    ):
+        raise Exception(
+            "When using --recursive option, destination folder cannot be the same (or subfolder of) as source one"
+        )
 
     if args.destination == "source":
         args.destination = args.source
 
     if args.logfile:
         from logging.handlers import TimedRotatingFileHandler
+
         handler = TimedRotatingFileHandler(args.logfile, when="D", backupCount=7)
     else:
         handler = logging.StreamHandler(sys.stdout)
@@ -129,8 +148,26 @@ if __name__ == "__main__":
     ext_mapper = ExtensionMapper(known_types, "other", api_url, name_regex)
     handler = NewFileHander(ext_mapper, args.destination, excluded)
     observer = Observer()
-    observer.schedule(handler, path=args.source, recursive=False)
+    observer.schedule(handler, path=args.source, recursive=args.recursive)
     observer.start()
+
+    if args.sort_old:
+        if args.recursive:
+            files_to_sort = [
+                os.path.join(dp, f)
+                for dp, dn, fn in os.walk(os.path.expanduser(args.source))
+                for f in fn
+            ]
+        else:
+            files_to_sort = [
+                os.path.join(args.source, f)
+                for f in os.listdir(os.path.expanduser(args.source))
+            ]
+            files_to_sort = [f for f in files_to_sort if os.path.isfile(f)]
+        event_cls = collections.namedtuple("Event", ("src_path"))
+
+        for f in files_to_sort:
+            handler.on_modified(event_cls(f))
 
     try:
         while True:
