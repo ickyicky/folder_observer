@@ -16,23 +16,37 @@ log = logging.getLogger()
 
 class NewFileHander(FileSystemEventHandler):
     def __init__(
-        self, extension_mapper, destination_folder, excluded, *args, recursive=False, **kwargs,
+        self,
+        extension_mapper,
+        destination_folder,
+        excluded,
+        *args,
+        recursive=False,
+        delay=0,
+        ln_duration=0,
+        **kwargs,
     ):
         """
         Handler for observing file modifications.
 
         extension_mapper should be an object providing .get function, such as dict,
         default dict or special function, and it should return subfolder name for given
-        destination folder. Also, destination folder can be specified as root folder 
+        destination folder. Also, destination folder can be specified as root folder
         and extension mapper can provide absolute paths.
 
+        There's and option to preserve file for specified delay or to cresate temporary
+        link to copied desitnation for diven time.
+
         exluded param should consist of regexes for excluded files
+
         """
         super().__init__(*args, **kwargs)
         self.extension_mapper = extension_mapper
         self.destination_folder = destination_folder
         self.excluded = excluded
         self.recursive = recursive
+        self.delay = delay
+        self.ln_duration = ln_duration
 
     def on_modified(self, event):
         if not os.path.isfile(event.src_path):
@@ -42,6 +56,9 @@ class NewFileHander(FileSystemEventHandler):
 
         if any((re.match(pattern, origin) for pattern in self.excluded)):
             return
+
+        if self.delay:
+            time.sleep(self.delay)
 
         log.debug(f"processing {origin}")
 
@@ -59,6 +76,16 @@ class NewFileHander(FileSystemEventHandler):
             )
         except Exception as e:
             log.error(f"processing {origin} failed due to error:", e)
+            return
+
+        if self.ln_duration:
+            log.debug(f"creating symlink for {origin}")
+            os.symlink(
+                os.path.join(destination_folder, origin), event.src_path,
+            )
+            time.sleep(self.ln_duration)
+            log.debug(f"removing symlink for {origin}")
+            os.remove(event.src_path)
 
 
 class ExtensionMapper:
@@ -84,7 +111,7 @@ class ExtensionMapper:
 
     def get(self, origin):
         origin = origin.lower()
-        extension = ".".join(origin.split(".")[1:])
+        extension = origin.split(".")[-1]
 
         try:
             return self.known_types[extension]
@@ -108,6 +135,20 @@ if __name__ == "__main__":
         help="At start of program, sort all old files",
         action="store_true",
         default=True,
+    )
+    parser.add_argument(
+        "--delay",
+        help="Delay for file move action in seconds",
+        action="store",
+        type=int,
+        default=0,
+    )
+    parser.add_argument(
+        "--ln-duration",
+        help="Creates symbolic link to moved file and replaces original file with ot for given amount of seconds",
+        action="store",
+        type=int,
+        default=0,
     )
     args = parser.parse_args()
 
@@ -146,7 +187,13 @@ if __name__ == "__main__":
         known_types[ext] = "AutoCAD"
 
     ext_mapper = ExtensionMapper(known_types, "other", api_url, name_regex)
-    handler = NewFileHander(ext_mapper, args.destination, excluded)
+    handler = NewFileHander(
+        ext_mapper,
+        args.destination,
+        excluded,
+        delay=args.delay,
+        ln_duration=args.ln_duration,
+    )
     observer = Observer()
     observer.schedule(handler, path=args.source, recursive=args.recursive)
     observer.start()
