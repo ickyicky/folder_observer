@@ -1,0 +1,15 @@
+[Unit]
+Description = Sorter for files
+After = network.target
+ 
+[Service]
+Type = simple
+ExecStart = python /home/doman/Projects/Personal/folder_observer/observer.py -v --ln-duration 30 /home/doman/Downloads --log /var/log/sorter/log.log
+User = doman
+Group = doman
+Restart = on-failure
+RestartSec = 5
+TimeoutStartSec = infinity
+ 
+[Install]
+WantedBy = multi-user.target
