@@ -104,8 +104,9 @@ class ExtensionMapper:
             content = resp.content.decode()
             result = re.findall(self.name_regex, content)[0]
         except:
+            raise
             result = self.default
-        result = result.replace(" ", "").replace(".", "")
+        result = result.replace(" ", "").replace(".", "").replace("Files", "")
         self.known_types[extension] = result
         return result
 
@@ -181,8 +182,14 @@ if __name__ == "__main__":
 
     excluded = (r".*\.crdownload$", r".*\.temp$", r".*\.part.*")
     api_url = "https://fileinfo.com/extension/"
-    name_regex = r"""<td>Category</td><td><a href="/filetypes/.+?">(.*?)</a></td>"""
-    known_types = {"pdf": "PDF", "skp": "SketchUp"}
+    name_regex = r"<a href=\"/filetypes/.+\">(.*?)</a>"
+
+    known_types = {
+        "pdf": "PDF",
+        "skp": "SketchUp",
+        "py": "Python",
+    }
+
     for ext in ("dwg", "dxf"):
         known_types[ext] = "AutoCAD"
 
